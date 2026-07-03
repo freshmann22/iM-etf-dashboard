@@ -1,0 +1,907 @@
+<!--
+  ETF 서비스 - MTS 화면 프로토타입 (실습용, 시안 기준 재구현)
+
+  실행 방법:
+  1) 이 파일(index.html)을 더블클릭하거나 브라우저 창으로 드래그하면 바로 열립니다.
+  2) 별도 서버/빌드/설치 과정이 필요 없습니다. (외부 프레임워크 미사용, 순수 HTML/CSS/JS)
+  3) 모든 데이터는 실제 API 연동 없이 JS 객체/배열의 더미데이터입니다.
+
+  보유 ETF 섹션 노출 제어:
+  - script 태그 내 `const hasEtfHoldings = true;` 값을 false로 바꾸면
+    상단 요약카드의 보유 정보 영역과 "보유 ETF" 섹션 전체가 화면에서 사라집니다.
+    (ETF 미보유 고객은 보유 ETF 섹션 미노출)
+-->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ETF 서비스</title>
+<style>
+  :root {
+    --point: #14c88a;         /* 포인트 컬러: 그린 */
+    --point-dark: #0ea876;
+    --point-bg: #e7faf2;
+    --up: #e6373b;            /* 상승 = 빨강 */
+    --down: #3474e0;          /* 하락 = 파랑 */
+    --text-main: #16181d;
+    --text-sub: #7b8087;
+    --text-mute: #a4a8ad;
+    --line: #edeef1;
+    --bg: #f4f5f7;
+    --card-bg: #ffffff;
+    --chip-bg: #f1f2f4;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+      "Malgun Gothic", Roboto, sans-serif;
+    background: #e7e8eb;
+    display: flex;
+    justify-content: center;
+  }
+
+  /* 모바일 MTS 프레임 */
+  #app {
+    width: 390px;
+    max-width: 100%;
+    min-height: 100vh;
+    background: var(--bg);
+    position: relative;
+    padding-bottom: 82px;
+  }
+
+  /* ===== 상태바 ===== */
+  .statusbar {
+    background: var(--card-bg);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 20px 2px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+  .statusbar .right-icons {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  /* ===== 헤더 ===== */
+  header {
+    background: var(--card-bg);
+    padding: 10px 16px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  header .top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header .title-line {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  header h1 {
+    font-size: 21px;
+    margin: 0;
+    font-weight: 800;
+    color: var(--text-main);
+    letter-spacing: -0.3px;
+  }
+  .beta-chip {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--point-dark);
+    border: 1.3px solid var(--point);
+    padding: 2px 7px 2.5px;
+    border-radius: 20px;
+  }
+  header .icon-area {
+    display: flex;
+    gap: 16px;
+  }
+  header .icon-btn {
+    width: 22px;
+    height: 22px;
+    color: var(--text-main);
+    position: relative;
+  }
+  header .icon-btn .dot {
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--point);
+    border: 1.5px solid var(--card-bg);
+  }
+  header .sub-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 6px;
+  }
+  header .subcopy {
+    font-size: 12.5px;
+    color: var(--text-sub);
+  }
+  header .my-setting {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--point-dark);
+    border: 1.3px solid var(--point);
+    border-radius: 20px;
+    padding: 4px 9px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+  }
+
+  main {
+    padding: 14px 16px 6px;
+  }
+
+  section { margin-bottom: 22px; }
+
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0 2px 10px;
+  }
+  .section-head .section-title {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--text-main);
+  }
+  .section-head .more-link {
+    font-size: 12px;
+    color: var(--text-sub);
+    font-weight: 600;
+  }
+
+  /* ===== 오늘의 ETF 흐름 요약 카드 ===== */
+  .summary-card {
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 2px 10px rgba(20, 22, 30, 0.04);
+  }
+  .summary-card .avatar {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: var(--point-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .summary-card .brief {
+    flex: 1.15;
+    min-width: 0;
+  }
+  .summary-card .brief .greet {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: var(--text-main);
+    margin: 0 0 4px;
+  }
+  .summary-card .brief .desc {
+    font-size: 12px;
+    color: var(--text-sub);
+    line-height: 1.4;
+    margin: 0 0 6px;
+  }
+  .summary-card .brief .link {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--point-dark);
+  }
+  .summary-card .divider {
+    width: 1px;
+    align-self: stretch;
+    background: var(--line);
+    flex-shrink: 0;
+  }
+  .summary-card .holding-brief {
+    flex: 1;
+    min-width: 0;
+    text-align: right;
+  }
+  .summary-card .holding-brief .h-count {
+    font-size: 11px;
+    color: var(--text-sub);
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .summary-card .holding-brief .h-amount {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--text-main);
+    margin-bottom: 2px;
+  }
+  .summary-card .holding-brief .h-return {
+    font-size: 12.5px;
+    font-weight: 800;
+  }
+
+  /* ===== 일반정보 카드 ===== */
+  .info-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .info-card {
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 14px 10px 12px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .info-card:active { background: var(--point-bg); }
+  .info-card .icon-circle {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--point-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    margin-bottom: 9px;
+  }
+  .info-card h3 {
+    margin: 0 0 5px;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--text-main);
+  }
+  .info-card p {
+    margin: 0 0 8px;
+    font-size: 10.8px;
+    line-height: 1.4;
+    color: var(--text-sub);
+    min-height: 30px;
+  }
+  .info-card .arrow {
+    font-size: 12px;
+    color: var(--text-mute);
+  }
+
+  /* ===== 시세정보 ===== */
+  .tab-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .tab-btn {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-sub);
+    background: var(--chip-bg);
+    border-radius: 20px;
+    cursor: pointer;
+  }
+  .tab-btn.active {
+    color: #fff;
+    background: var(--point);
+  }
+
+  .quote-list {
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .quote-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+    gap: 10px;
+    cursor: pointer;
+  }
+  .quote-row:last-child { border-bottom: none; }
+  .quote-row .rank {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--point-bg);
+    color: var(--point-dark);
+    font-size: 11px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .quote-row .name-code { flex: 1.3; min-width: 0; }
+  .quote-row .name-code .name-line {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .quote-row .name-code .name {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .quote-row .name-code .code {
+    font-size: 10px;
+    color: var(--text-sub);
+    background: var(--chip-bg);
+    padding: 1.5px 5px;
+    border-radius: 5px;
+    flex-shrink: 0;
+  }
+  .quote-row .metrics {
+    text-align: right;
+    flex: 1;
+  }
+  .quote-row .metrics .price {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+  .quote-row .metrics .rate {
+    font-size: 11.5px;
+    font-weight: 800;
+    margin-top: 2px;
+  }
+  .quote-row .metrics .extra {
+    font-size: 10.5px;
+    color: var(--text-sub);
+    margin-top: 2px;
+  }
+  .rate.up { color: var(--up); }
+  .rate.down { color: var(--down); }
+  .badge {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 6px;
+    margin-top: 3px;
+    display: inline-block;
+  }
+  .badge.new-high { color: var(--up); background: #fdeceb; }
+  .badge.new-low { color: var(--down); background: #eaf1fd; }
+  .quote-row .chev {
+    font-size: 13px;
+    color: var(--text-mute);
+    flex-shrink: 0;
+  }
+
+  /* ===== 보유 ETF ===== */
+  .holding-summary {
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 15px 16px;
+    margin-bottom: 10px;
+  }
+  .holding-summary .row1 {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+  }
+  .holding-summary .row1 .label {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--text-main);
+  }
+  .holding-summary .stat-row {
+    display: flex;
+    gap: 20px;
+  }
+  .holding-summary .stat {
+    font-size: 11.5px;
+    color: var(--text-sub);
+  }
+  .holding-summary .stat b {
+    display: block;
+    font-size: 14px;
+    color: var(--text-main);
+    margin-top: 3px;
+    font-weight: 800;
+  }
+  .holding-summary .stat b.rate.up,
+  .holding-summary .stat b.rate.down {
+    font-size: 14px;
+  }
+
+  .news-disclosure {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .mini-card {
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 14px 16px;
+  }
+  .mini-card h4 {
+    margin: 0 0 10px;
+    font-size: 12.5px;
+    font-weight: 800;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .mini-card ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .mini-card li {
+    padding: 9px 0;
+    border-top: 1px solid var(--line);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .mini-card li:first-child { border-top: none; }
+  .mini-card .item-title {
+    font-size: 12px;
+    color: var(--text-main);
+    line-height: 1.4;
+  }
+  .mini-card .item-meta {
+    font-size: 10.5px;
+    color: var(--text-mute);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* ===== 바로가기 ===== */
+  .quicklinks {
+    display: flex;
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .quicklinks .ql-item {
+    flex: 1;
+    text-align: center;
+    padding: 14px 4px;
+    cursor: pointer;
+    border-right: 1px solid var(--line);
+  }
+  .quicklinks .ql-item:last-child { border-right: none; }
+  .quicklinks .ql-item .ql-icon { font-size: 17px; margin-bottom: 6px; }
+  .quicklinks .ql-item .ql-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--text-sub);
+  }
+
+  /* ===== 하단 고지 ===== */
+  .disclaimer {
+    padding: 4px 4px 6px;
+    font-size: 10px;
+    color: var(--text-mute);
+    line-height: 1.6;
+    text-align: center;
+  }
+
+  /* ===== 하단 탭바 ===== */
+  nav.tabbar {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 390px;
+    max-width: 100%;
+    background: var(--card-bg);
+    border-top: 1px solid var(--line);
+    display: flex;
+    padding: 8px 0 10px;
+  }
+  nav.tabbar .tab-item {
+    flex: 1;
+    text-align: center;
+    font-size: 10.5px;
+    color: var(--text-mute);
+    cursor: pointer;
+  }
+  nav.tabbar .tab-item .ic {
+    font-size: 18px;
+    margin-bottom: 3px;
+  }
+  nav.tabbar .tab-item.active {
+    color: var(--point-dark);
+    font-weight: 800;
+  }
+
+  /* ===== 토스트 ===== */
+  #toast {
+    position: fixed;
+    left: 50%;
+    bottom: 100px;
+    transform: translate(-50%, 20px);
+    background: rgba(22, 24, 29, 0.92);
+    color: #fff;
+    padding: 11px 18px;
+    border-radius: 24px;
+    font-size: 12.5px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    white-space: nowrap;
+    z-index: 100;
+  }
+  #toast.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- 상태바 -->
+  <div class="statusbar">
+    <span>9:41</span>
+    <span class="right-icons">
+      <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><rect x="0" y="7" width="2.5" height="4"/><rect x="4.5" y="5" width="2.5" height="6"/><rect x="9" y="2.5" width="2.5" height="8.5"/><rect x="13.5" y="0" width="2.5" height="11"/></svg>
+      <svg width="15" height="11" viewBox="0 0 15 11" fill="currentColor"><path d="M7.5 10.5a1.3 1.3 0 1 1 0-2.6 1.3 1.3 0 0 1 0 2.6zM3.7 6.4a5.4 5.4 0 0 1 7.6 0l-1.5 1.5a3.3 3.3 0 0 0-4.6 0L3.7 6.4zM0.9 3.6a9.3 9.3 0 0 1 13.2 0l-1.5 1.5a7.2 7.2 0 0 0-10.2 0L0.9 3.6z"/></svg>
+      <svg width="24" height="11" viewBox="0 0 24 11" fill="none"><rect x="0.5" y="0.5" width="20" height="10" rx="2.5" stroke="currentColor"/><rect x="2" y="2" width="17" height="7" rx="1.3" fill="currentColor"/><rect x="21.5" y="3.3" width="1.6" height="4.4" rx="0.8" fill="currentColor"/></svg>
+    </span>
+  </div>
+
+  <!-- 1. 상단 헤더 -->
+  <header>
+    <div class="top-row">
+      <div class="title-line">
+        <h1>ETF 서비스</h1>
+        <span class="beta-chip">Beta</span>
+      </div>
+      <div class="icon-area">
+        <span class="icon-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+          <span class="dot"></span>
+        </span>
+        <span class="icon-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </span>
+      </div>
+    </div>
+    <div class="sub-row">
+      <p class="subcopy">시장 흐름과 보유 ETF 정보를 한눈에</p>
+      <span class="my-setting">👤 MY 맞춤설정</span>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- 2. 오늘의 ETF 흐름 요약 카드 -->
+    <section>
+      <div class="summary-card">
+        <div class="avatar">🌱</div>
+        <div class="brief">
+          <p class="greet">김하나님, 좋은 아침이에요 ☀️</p>
+          <p class="desc">글로벌 시장이 보합세를 보이고 있어요.</p>
+          <p class="link" id="briefingLink">오늘의 한줄 브리핑 보기 &gt;</p>
+        </div>
+        <div class="divider" id="summaryDivider"></div>
+        <div class="holding-brief" id="summaryHoldingBrief">
+          <div class="h-count">보유 ETF 4종</div>
+          <div class="h-amount">12,850,000원</div>
+          <div class="h-return rate up">오늘 +1.24%</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. 일반정보 섹션 -->
+    <section>
+      <div class="section-head">
+        <span class="section-title">일반정보</span>
+        <span class="more-link">더보기 &gt;</span>
+      </div>
+      <div class="info-cards" id="infoCards"></div>
+    </section>
+
+    <!-- 4. 시세정보 섹션 -->
+    <section>
+      <div class="section-head">
+        <span class="section-title">시세정보</span>
+        <span class="more-link">더보기 &gt;</span>
+      </div>
+      <div class="tab-row">
+        <div class="tab-btn active" data-tab="volume">거래량</div>
+        <div class="tab-btn" data-tab="highlow">신고·저가</div>
+      </div>
+      <div class="quote-list" id="quoteList"></div>
+    </section>
+
+    <!-- 5. 보유 ETF 섹션 (보유 고객 전용, JS에서 노출 제어) -->
+    <section id="holdingSection" style="display:none;">
+      <div class="section-head">
+        <span class="section-title">보유 ETF</span>
+        <span class="more-link">더보기 &gt;</span>
+      </div>
+
+      <div class="holding-summary">
+        <div class="row1">
+          <span class="label">보유 ETF 4종</span>
+        </div>
+        <div class="stat-row">
+          <div class="stat">평가금액
+            <b id="holdingAmount">12,850,000원</b>
+          </div>
+          <div class="stat">평가손익
+            <b class="rate up" id="holdingProfit">+156,200원</b>
+          </div>
+          <div class="stat">오늘 수익률
+            <b class="rate up" id="holdingReturn">+1.24%</b>
+          </div>
+        </div>
+      </div>
+
+      <div class="news-disclosure">
+        <div class="mini-card">
+          <h4>📰 ETF/구성종목 뉴스</h4>
+          <ul id="newsList"></ul>
+        </div>
+        <div class="mini-card">
+          <h4>📄 공시</h4>
+          <ul id="disclosureList"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. 바로가기 -->
+    <section>
+      <div class="quicklinks">
+        <div class="ql-item" data-label="ETF 비교"><div class="ql-icon">⇄</div><div class="ql-label">ETF 비교</div></div>
+        <div class="ql-item" data-label="관심 ETF"><div class="ql-icon">★</div><div class="ql-label">관심 ETF</div></div>
+        <div class="ql-item" data-label="모의투자"><div class="ql-icon">◔</div><div class="ql-label">모의투자</div></div>
+        <div class="ql-item" data-label="세금가이드"><div class="ql-icon">🧾</div><div class="ql-label">세금가이드</div></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 8. 하단 고지 문구 -->
+  <p class="disclaimer">
+    본 정보는 투자 참고용이며, 투자 판단의 책임은 본인에게 있습니다.<br />
+    시세 정보는 기준 시각에 따라 실제 거래 가격과 차이가 있을 수 있습니다.
+  </p>
+
+  <!-- 9. 하단 탭바 -->
+  <nav class="tabbar">
+    <div class="tab-item"><div class="ic">⌂</div>홈</div>
+    <div class="tab-item active"><div class="ic">📊</div>ETF</div>
+    <div class="tab-item"><div class="ic">💼</div>자산</div>
+    <div class="tab-item"><div class="ic">⇅</div>주문</div>
+    <div class="tab-item"><div class="ic">≡</div>더보기</div>
+  </nav>
+
+  <div id="toast"></div>
+</div>
+
+<script>
+  /* ================= 더미데이터 ================= */
+
+  // 보유 여부 제어용 플래그. false로 바꾸면 상단 요약카드의 보유 정보 영역과
+  // "보유 ETF" 섹션 전체가 화면에서 사라짐. (ETF 미보유 고객은 보유 ETF 섹션 미노출)
+  const hasEtfHoldings = true;
+
+  const generalInfo = [
+    { icon: "📰", title: "이슈", desc: "미국 금리 동결 전망 / 글로벌 ETF 거래대금 증가" },
+    { icon: "📈", title: "상승 모멘텀", desc: "AI·반도체 ETF 관심 / 최근 거래량과 수익률 동반 상승" },
+    { icon: "🧭", title: "테마", desc: "전력인프라 테마 / AI 데이터센터 관련 ETF 관심 확대" },
+  ];
+
+  const volumeData = [
+    { rank: 1, name: "TIGER 미국나스닥100", code: "133690", price: "123,450원", rate: 1.85, volume: "1,234,567주" },
+    { rank: 2, name: "KODEX 200", code: "069500", price: "38,765원", rate: 0.92, volume: "987,654주" },
+    { rank: 3, name: "TIGER 미국S&P500", code: "360750", price: "135,200원", rate: 1.32, volume: "876,543주" },
+    { rank: 4, name: "KODEX 반도체", code: "091160", price: "20,150원", rate: -0.45, volume: "654,321주" },
+    { rank: 5, name: "ARIRANG 고배당주", code: "161510", price: "11,245원", rate: 0.67, volume: "543,210주" },
+  ];
+
+  const highLowData = [
+    { rank: 1, name: "KODEX AI반도체핵심장비", price: "18,950원", rate: 3.42, type: "신고가", base: "52주" },
+    { rank: 2, name: "TIGER 미국테크TOP10", price: "21,340원", rate: 2.18, type: "신고가", base: "52주" },
+    { rank: 3, name: "KODEX 2차전지산업", price: "9,870원", rate: -1.25, type: "신저가", base: "52주" },
+    { rank: 4, name: "TIGER 차이나전기차", price: "7,420원", rate: -0.88, type: "신저가", base: "52주" },
+  ];
+
+  const newsData = [
+    { title: "[시장] 美 CPI 둔화에 기술주 ETF 강세", meta: "3시간 전" },
+    { title: "[산업] 반도체 업황 개선 기대감 확산", meta: "5시간 전" },
+    { title: "[테마] 전기차 수요 회복 전망 속 2차전지 ETF 관심", meta: "7시간 전" },
+  ];
+
+  const disclosureData = [
+    { title: "[정기보고서] KODEX 200 투자설명서 변경 안내", meta: "2025.05.12" },
+    { title: "[분배금] TIGER 미국배당다우존스 분배금 지급 안내", meta: "2025.05.09" },
+    { title: "[지수변경] TIGER 미국나스닥100 기초지수 정기 변경 예정", meta: "2025.05.08" },
+  ];
+
+  /* ================= 렌더링 ================= */
+
+  function rateClass(rate) {
+    return rate >= 0 ? "up" : "down";
+  }
+  function rateText(rate) {
+    return (rate >= 0 ? "+" : "") + rate.toFixed(2) + "%";
+  }
+
+  function renderInfoCards() {
+    const wrap = document.getElementById("infoCards");
+    wrap.innerHTML = generalInfo.map((item, i) => {
+      const [title, desc] = item.desc.split(" / ");
+      return `
+      <div class="info-card" data-index="${i}">
+        <div class="icon-circle">${item.icon}</div>
+        <h3>${item.title}</h3>
+        <p>${title}<br>${desc}</p>
+        <span class="arrow">&gt;</span>
+      </div>
+    `;
+    }).join("");
+
+    wrap.querySelectorAll(".info-card").forEach(el => {
+      const title = generalInfo[el.dataset.index].title;
+      el.addEventListener("click", () => showToast(`${title} 상세 화면으로 이동 예정`));
+    });
+  }
+
+  function renderVolumeList() {
+    const wrap = document.getElementById("quoteList");
+    wrap.innerHTML = volumeData.map(row => `
+      <div class="quote-row">
+        <span class="rank">${row.rank}</span>
+        <div class="name-code">
+          <div class="name-line">
+            <span class="name">${row.name}</span>
+          </div>
+          <span class="code">${row.code}</span>
+        </div>
+        <div class="metrics">
+          <div class="price">${row.price}</div>
+          <div class="rate ${rateClass(row.rate)}">${rateText(row.rate)}</div>
+          <div class="extra">${row.volume}</div>
+        </div>
+        <span class="chev">&gt;</span>
+      </div>
+    `).join("");
+  }
+
+  function renderHighLowList() {
+    const wrap = document.getElementById("quoteList");
+    wrap.innerHTML = highLowData.map(row => `
+      <div class="quote-row">
+        <span class="rank">${row.rank}</span>
+        <div class="name-code">
+          <div class="name-line">
+            <span class="name">${row.name}</span>
+          </div>
+        </div>
+        <div class="metrics">
+          <div class="price">${row.price}</div>
+          <div class="rate ${rateClass(row.rate)}">${rateText(row.rate)}</div>
+          <span class="badge ${row.type === '신고가' ? 'new-high' : 'new-low'}">${row.type} · ${row.base}</span>
+        </div>
+        <span class="chev">&gt;</span>
+      </div>
+    `).join("");
+  }
+
+  function renderNewsDisclosure() {
+    const newsWrap = document.getElementById("newsList");
+    const discWrap = document.getElementById("disclosureList");
+
+    newsWrap.innerHTML = newsData.map(n => `
+      <li>
+        <span class="item-title">${n.title}</span>
+        <span class="item-meta">${n.meta}</span>
+      </li>
+    `).join("");
+
+    discWrap.innerHTML = disclosureData.map(d => `
+      <li>
+        <span class="item-title">${d.title}</span>
+        <span class="item-meta">${d.meta}</span>
+      </li>
+    `).join("");
+
+    document.querySelectorAll("#newsList li").forEach(el => {
+      el.addEventListener("click", () => showToast("뉴스 상세 화면으로 이동 예정"));
+    });
+    document.querySelectorAll("#disclosureList li").forEach(el => {
+      el.addEventListener("click", () => showToast("공시 상세 화면으로 이동 예정"));
+    });
+  }
+
+  function renderHoldingSection() {
+    const section = document.getElementById("holdingSection");
+    const summaryHoldingBrief = document.getElementById("summaryHoldingBrief");
+    const summaryDivider = document.getElementById("summaryDivider");
+
+    if (!hasEtfHoldings) {
+      section.style.display = "none";
+      summaryHoldingBrief.style.display = "none";
+      summaryDivider.style.display = "none";
+      return;
+    }
+    section.style.display = "block";
+    summaryHoldingBrief.style.display = "block";
+    summaryDivider.style.display = "block";
+    renderNewsDisclosure();
+  }
+
+  /* ================= 탭 전환 ================= */
+
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      if (btn.dataset.tab === "volume") {
+        renderVolumeList();
+      } else {
+        renderHighLowList();
+      }
+    });
+  });
+
+  /* ================= 바로가기 / 브리핑 링크 토스트 ================= */
+
+  document.querySelectorAll(".ql-item").forEach(el => {
+    el.addEventListener("click", () => showToast(`${el.dataset.label} 화면으로 이동 예정`));
+  });
+  document.getElementById("briefingLink").addEventListener("click", () => {
+    showToast("한줄 브리핑 상세 화면으로 이동 예정");
+  });
+
+  /* ================= 토스트 ================= */
+
+  let toastTimer = null;
+  function showToast(msg) {
+    const toast = document.getElementById("toast");
+    toast.textContent = msg;
+    toast.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove("show"), 1600);
+  }
+
+  /* ================= 초기 렌더 ================= */
+
+  renderInfoCards();
+  renderVolumeList();
+  renderHoldingSection();
+</script>
+</body>
+</html>
